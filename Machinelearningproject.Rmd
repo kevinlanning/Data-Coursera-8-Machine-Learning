@@ -1,0 +1,108 @@
+---
+title: "Machine Learning Class Project"
+author: "Kevin Lanning"
+date: "Thursday, July 23, 2015"
+output: html_document
+---
+Introduction
+Fitness trackers "quantify how much of a particular activity they do, but they rarely quantify how well they do it"" (from assignment). This study uses accelerometer data from the belt, forearm, arm, and dumbell of 6 male participants, who were asked to perform lifts of a light (1.25kg) dumbbell correctly (Class A) and incorrectly (Classes B-E):
+
+Exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D), and throwing the hips to the front (Class E).
+
+In this project, I predict the manner in which they did the exercise from the accelerometer data
+
+```{r get data}
+library(AppliedPredictiveModeling)
+library(caret)
+library(doParallel)
+library(reshape)
+setwd("C:/Users/the/OneDrive/Data Coursera 4 EDA")
+#Following lines require user interaction or net access
+#fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+#download.file (fileUrl,"traindata")
+#fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+#download.file (fileUrl,"testdata")
+#registerDoParallel(cores=2)
+set.seed(33458)
+traindat <-read.csv("traindata", sep =",", header = TRUE)
+validdat <-read.csv("testdata", sep =",", header = TRUE)
+```
+
+I split the training data into train and test, and each into predictors and dvs. I also generate two small samples (tiny and medium) within training to explore and debug. 
+
+```{r data splitting}
+
+inTrain <- createDataPartition(traindat$classe, p = 3/4, list = FALSE)
+train1 <- traindat[inTrain,-160]
+trainClass <- traindat[inTrain,160]
+test1 <- traindat[-inTrain,-160]
+testClass <- traindat[-inTrain,160]
+valid1 <- validdat[,-160]
+trainy <- traindat[inTrain,]
+inTiny <- createDataPartition(trainy$classe, p = .025, list = FALSE)
+inMedium <- createDataPartition(trainy$classe, p = .1, list = FALSE)
+tiny1 <- trainy[inTiny, -160]
+medium1 <- trainy[inMedium,-160]
+tinyClass <- trainy[inTiny,160]
+mediumClass <- trainy[inMedium,160]
+```
+I remove variables from the training set in which most values are missing, then explore the importance of the remaining variables by running random forest on the tiny sample. This analysis shows name variable (which varImp represents as five dummy variables) is unimportant, so it's dropped in the training set, as is the sequential variable num window is also dropped. I then reduce the training set further through PCA.  Note that several additional values for thresh were explored on the medium data (including .999, which retains all predictors). These led to less accurate solutions in an rbm, and are commented out here.
+
+```{r reduction of predictors}
+# dropping variables with many NAs
+
+train1  <- train1 [,c(2,7:11,37:49,60:68,84:86,102,113:124,140,151:159)]
+tiny1  <- tiny1 [,c(2,7:11,37:49,60:68,84:86,102,113:124,140,151:159)]
+fity <- train(tinyClass ~.,data=,tiny1,method="rf",prox=TRUE)
+impList <-varImp(fity)
+head(sort_df(as.data.frame(impList[1])))
+train1 <-train1[-c(1,2)]
+#prComp <- preProcess(medium1,method="pca",thresh=0.8)
+#prComp <- preProcess(medium1,method="pca",thresh=0.9)
+#prComp <- preProcess(medium1,method="pca",thresh=0.999)
+prComp <- preProcess(train1,method="pca",thresh=0.95)
+prComp
+trainPC <- predict(prComp,train1)
+```
+
+I initially ran rbm, but this led to insufficiently accurate predictions (accuracy ~ .71).  I then used the random forest approach.
+
+```{r Random forest}
+
+#ctrl   <- trainControl (method = "boot", number = 25)
+#modelfit <- train(mediumClass ~ ., method = "gbm",data=trainPC, trControl = ctrl, verbose = FALSE)
+modelfit <- train(trainClass ~ ., method = "rf",data=trainPC, verbose = FALSE)
+modelfit
+```
+
+I reduce the test and validation samples as above
+```{r reduction of test and valid data}
+test1   <- test1 [,c(2,7:11,37:49,60:68,84:86,102,113:124,140,151:159)]
+valid1   <- valid1 [,c(2,7:11,37:49,60:68,84:86,102,113:124,140,151:159)]
+test1 <-test1[-c(1,2)]
+valid1 <- valid1[-c(1,2)]
+testPC <- predict(prComp,test1)
+validPC <- predict(prComp,valid1)
+```
+
+Finally, I estimate out-of-sample error on the test data, then generate predicted values for the assignment. When the model is applied to the new test data, an overall prediction accuracy in excess of .97 (out of sample error < 2%), as can be seen in the output below.
+
+```{r Out-of-sample error and prediction}
+
+confusionMatrix(testClass,predict(modelfit,testPC))
+
+# predicted results for new data
+answers <- predict(modelfit,validPC)
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+dir.create("machine")
+setwd("machine")
+pml_write_files(answers)
+setwd("..")
+```
+
