@@ -1,3 +1,3 @@
 # Data-Coursera-8-Machine-Learning
-# Course project for Coursera Machine Learning
-My course project. 
+## Please go <a href='http://kevinlanning.github.io/Data-Coursera-8-Machine-Learning/Machinelearningproject.html'>here</a> to read the report.</p> Thanks...
+
